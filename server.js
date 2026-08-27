@@ -16,13 +16,13 @@ app.get('/get-stream', async (req, res) => {
     try {
         console.log("Launching cloud chromium...");
         
-        // Yahan 'await' aur '()' hata diya hai
-        const executablePath = await chromium.executablePath(); 
+        // Yahan 'await' lagana zaroori hai kyunki yeh async function hai
+        const executablePath = await chromium.executablePath();
         
         browser = await puppeteer.launch({
             args: chromium.args,
             defaultViewport: chromium.defaultViewport,
-            executablePath: await chromium.executablePath(),
+            executablePath: executablePath,
             headless: chromium.headless,
             ignoreHTTPSErrors: true,
         });
