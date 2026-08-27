@@ -1,6 +1,5 @@
 const express = require('express');
-const axios = require('axios');
-const cheerio = require('cheerio');
+const puppeteer = require('puppeteer');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -12,58 +11,52 @@ app.get('/get-stream', async (req, res) => {
         return res.status(400).json({ error: "Please provide a 'url' query parameter." });
     }
 
+    let browser;
     try {
-        console.log("Fetching page content without browser...");
+        console.log("Launching browser for dynamic page...");
         
-        // Target page ka HTML fetch kar rahe hain
-        const response = await axios.get(targetUrl, {
-            headers: {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                'Referer': targetUrl
-            }
+        // Render ke liye safe browser launch config
+        browser = await puppeteer.launch({
+            headless: true,
+            args: [
+                "--no-sandbox",
+                "--disable-setuid-sandbox",
+                "--disable-dev-shm-usage",
+                "--disable-gpu"
+            ],
+            executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || puppeteer.executablePath()
         });
 
-        const html = response.data;
-        const $ = cheerio.load(html);
-
+        const page = await browser.newPage();
+        
         let streamUrl = null;
 
-        // HTML ya scripts ke andar .m3u8 link dhundhne ka logic
-        // Yahan hum script tags ya source tags check kar rahe hain
-        $('script').each((i, element) => {
-            const scriptContent = $(element).html();
-            if (scriptContent) {
-                // Regular expression se m3u8 link extract karna
-                const match = scriptContent.match(/https?:\/\/[^"'\s]+\.m3u8[^"'\s]*/);
-                if (match) {
-                    streamUrl = match[0];
-                }
+        // Jaise hi page network request karega, hum m3u8 link pakad lenge
+        page.on('request', (request) => {
+            const reqUrl = request.url();
+            if (reqUrl.includes('.m3u8') || reqUrl.includes('playlist')) {
+                streamUrl = reqUrl;
             }
         });
 
-        // Agar script mein nahi mila toh source/iframe tags check karte hain
-        if (!streamUrl) {
-            $('source').each((i, element) => {
-                const src = $(element).attr('src');
-                if (src && src.includes('.m3u8')) {
-                    streamUrl = src;
-                }
-            });
-        }
+        await page.goto(targetUrl, { waitUntil: 'networkidle2', timeout: 30000 });
+
+        // Thoda wait karenge taaki player load ho aur request trigger ho
+        await new Promise(resolve => setTimeout(resolve, 4000));
+
+        await browser.close();
 
         if (streamUrl) {
             return res.json({ success: true, stream: streamUrl });
         } else {
-            // Fallback: Agar page ke andar direct text mein m3u8 ho
-            const rawMatch = html.match(/https?:\/\/[^"'\s]+\.m3u8[^"'\s]*/);
-            if (rawMatch) {
-                return res.json({ success: true, stream: rawMatch[0] });
-            }
-            return res.status(404).json({ error: "Could not find stream link (.m3u8) in the page." });
+            return res.status(404).json({ error: "Could not find stream link (.m3u8)." });
         }
 
     } catch (error) {
-        console.error("Error fetching stream:", error.message);
+        if (browser) {
+            await browser.close();
+        }
+        console.error("Error:", error.message);
         return res.status(500).json({ error: error.message });
     }
 });
