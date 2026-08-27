@@ -1,6 +1,5 @@
 const express = require('express');
-const puppeteer = require('puppeteer-core');
-const chromium = require('chrome-aws-lambda');
+const puppeteer = require('puppeteer');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -14,17 +13,16 @@ app.get('/get-stream', async (req, res) => {
 
     let browser;
     try {
-        console.log("Launching cloud chromium...");
-        
-        // Render ke liye aws-lambda chromium setup
-        const executablePath = await chromium.executablePath || process.env.PUPPETEER_EXECUTABLE_PATH;
+        console.log("Launching browser...");
         
         browser = await puppeteer.launch({
-            args: chromium.args,
-            defaultViewport: chromium.defaultViewport,
-            executablePath: await chromium.executablePath,
-            headless: chromium.headless,
-            ignoreHTTPSErrors: true,
+            headless: true,
+            args: [
+                "--no-sandbox",
+                "--disable-setuid-sandbox",
+                "--disable-dev-shm-usage",
+                "--disable-gpu"
+            ]
         });
 
         const page = await browser.newPage();
