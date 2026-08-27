@@ -1,59 +1,65 @@
 const express = require('express');
 const puppeteer = require('puppeteer');
-const app = express();
-const PORT = 5000;
 
-// /get-stream route define kiya gaya hai
+const app = express();
+const PORT = process.env.PORT || 5000;
+
 app.get('/get-stream', async (req, res) => {
-    const moviePageUrl = req.query.url;
+    const targetUrl = req.query.url;
     
-    if (!moviePageUrl) {
-        return res.status(400).json({ error: 'Movie URL is required. Use ?url=YOUR_LINK' });
+    if (!targetUrl) {
+        return res.status(400).json({ error: "Please provide a 'url' query parameter." });
     }
 
+    let browser;
     try {
-        console.log('Launching Local Chrome to capture stream...');
+        console.log("Launching Local Chrome to capture stream...");
         
-        // Headless browser start karein
-        const browser = await puppeteer.launch({ 
+        // Render ke liye updated puppeteer configuration
+        browser = await puppeteer.launch({
             headless: true,
-            args: ['--no-sandbox', '--disable-setuid-sandbox']
+            args: [
+                "--no-sandbox",
+                "--disable-setuid-sandbox",
+                "--disable-dev-shm-usage",
+                "--disable-accelerated-2d-canvas",
+                "--no-first-run",
+                "--no-zygote",
+                "--disable-gpu"
+            ],
+            executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || puppeteer.executablePath()
         });
-        
-        const page = await browser.newPage();
-        let extractedM3u8 = null;
 
-        // Network requests ko intercept karke .m3u8 link pakdein
+        const page = await browser.newPage();
+        
+        let streamUrl = null;
+
+        // Network requests ko intercept karke m3u8 link pakadne ke liye
         page.on('request', (request) => {
-            const url = request.url();
-            if (url.includes('.m3u8')) {
-                extractedM3u8 = url;
+            const reqUrl = request.url();
+            if (reqUrl.includes('.m3u8') || reqUrl.includes('playlist')) {
+                streamUrl = reqUrl;
             }
         });
 
-        // Target page par jayein
-        await page.goto(moviePageUrl, { waitUntil: 'networkidle2', timeout: 60000 });
-        
-        // Thoda wait karein taaki video player load ho aur request trigger ho
-        await new Promise(resolve => setTimeout(resolve, 4000));
+        await page.goto(targetUrl, { waitUntil: 'networkidle2', timeout: 30000 });
+
+        // Thoda wait karein taaki stream request trigger ho jaye
+        await new Promise(resolve => setTimeout(resolve, 5000));
 
         await browser.close();
 
-        if (extractedM3u8) {
-            console.log('Captured Live M3U8 Link!');
-            return res.json({ 
-                success: true, 
-                m3u8_url: extractedM3u8 
-            });
+        if (streamUrl) {
+            return res.json({ success: true, stream: streamUrl });
         } else {
-            return res.status(404).json({ 
-                success: false, 
-                message: 'M3U8 link not found on this page.' 
-            });
+            return res.status(404).json({ error: "Could not find stream link (.m3u8)." });
         }
 
     } catch (error) {
-        console.error('Error:', error.message);
+        if (browser) {
+            await browser.close();
+        }
+        console.error("Error launching browser:", error);
         return res.status(500).json({ error: error.message });
     }
 });
