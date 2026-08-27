@@ -8,6 +8,8 @@
     "build": "npx puppeteer browsers install chrome"
   },
   "dependencies": {
+    "axios": "^1.20.0",
+    "cheerio": "^1.2.0",
     "express": "^4.19.2",
     "puppeteer": "^22.x.x"
   }
