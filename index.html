@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Stream HD Player</title>
+  
+  <!-- HLS.js Library -->
+  <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+  <!-- FontAwesome Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
+
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    }
+
+    body {
+      background: #0d0f12;
+      color: #fff;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+      overflow: hidden;
+    }
+
+    .player-wrapper {
+      position: relative;
+      width: 90%;
+      max-width: 1000px;
+      aspect-ratio: 16 / 9;
+      background: #000;
+      border-radius: 12px;
+      overflow: hidden;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.7);
+    }
+
+    video {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+    }
+
+    /* Custom Controls Overlay */
+    .controls-overlay {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      background: linear-gradient(to top, rgba(0,0,0,0.95), rgba(0,0,0,0));
+      padding: 15px 20px 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      opacity: 0;
+      transition: opacity 0.3s ease;
+    }
+
+    .player-wrapper:hover .controls-overlay {
+      opacity: 1;
+    }
+
+    /* Progress Bar */
+    .progress-area {
+      position: relative;
+      height: 6px;
+      width: 100%;
+      background: rgba(255, 255, 255, 0.2);
+      border-radius: 3px;
+      cursor: pointer;
+    }
+
+    .progress-bar {
+      height: 100%;
+      width: 0%;
+      background: #ff0055;
+      border-radius: 3px;
+      position: relative;
+    }
+
+    .progress-bar::after {
+      content: '';
+      position: absolute;
+      right: -6px;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 12px;
+      height: 12px;
+      background: #ff0055;
+      border-radius: 50%;
+      box-shadow: 0 0 8px rgba(255, 0, 85, 0.8);
+      display: none;
+    }
+
+    .progress-area:hover .progress-bar::after {
+      display: block;
+    }
+
+    /* Control Buttons Layout */
+    .control-buttons {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .left-controls, .right-controls {
+      display: flex;
+      align-items: center;
+      gap: 15px;
+    }
+
+    .btn {
+      background: none;
+      border: none;
+      color: #fff;
+      font-size: 16px;
+      cursor: pointer;
+      transition: color 0.2s, transform 0.1s;
+    }
+
+    .btn:hover {
+      color: #ff0055;
+      transform: scale(1.1);
+    }
+
+    .time-display {
+      font-size: 13px;
+      color: #ccc;
+      font-weight: 500;
+    }
+
+    /* Quality Menu Dropdown */
+    .quality-select {
+      background: rgba(255, 255, 255, 0.1);
+      color: #fff;
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      padding: 4px 8px;
+      border-radius: 4px;
+      font-size: 12px;
+      outline: none;
+      cursor: pointer;
+    }
+
+    .quality-select option {
+      background: #1e1e24;
+      color: #fff;
+    }
+
+    /* Loader Indicator */
+    .loader {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      border: 4px solid rgba(255, 255, 255, 0.1);
+      border-left-color: #ff0055;
+      border-radius: 50%;
+      width: 45px;
+      height: 45px;
+      animation: spin 1s linear infinite;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+  </style>
+</head>
+<body>
+
+  <div class="player-wrapper" id="playerWrapper">
+    <div class="loader" id="loader"></div>
+    <video id="video"></video>
+
+    <!-- Controls Overlay -->
+    <div class="controls-overlay">
+      <!-- Custom Progress Bar -->
+      <div class="progress-area" id="progressArea">
+        <div class="progress-bar" id="progressBar"></div>
+      </div>
+
+      <!-- Control Bar Buttons -->
+      <div class="control-buttons">
+        <div class="left-controls">
+          <button class="btn" id="playBtn"><i class="fa-solid fa-play"></i></button>
+          <button class="btn" id="rewindBtn"><i class="fa-solid fa-rotate-left"></i></button>
+          <button class="btn" id="forwardBtn"><i class="fa-solid fa-rotate-right"></i></button>
+          <button class="btn" id="muteBtn"><i class="fa-solid fa-volume-high"></i></button>
+          <span class="time-display" id="timeDisplay">0:00 / 0:00</span>
+        </div>
+
+        <div class="right-controls">
+          <i class="fa-solid fa-gear" style="font-size:12px; color:#aaa;"></i>
+          <select id="qualitySelect" class="quality-select">
+            <option value="-1">Auto Quality</option>
+          </select>
+          <button class="btn" id="fullscreenBtn"><i class="fa-solid fa-expand"></i></button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const video = document.getElementById('video');
+    const playBtn = document.getElementById('playBtn');
+    const rewindBtn = document.getElementById('rewindBtn');
+    const forwardBtn = document.getElementById('forwardBtn');
+    const muteBtn = document.getElementById('muteBtn');
+    const timeDisplay = document.getElementById('timeDisplay');
+    const progressArea = document.getElementById('progressArea');
+    const progressBar = document.getElementById('progressBar');
+    const qualitySelect = document.getElementById('qualitySelect');
+    const fullscreenBtn = document.getElementById('fullscreenBtn');
+    const loader = document.getElementById('loader');
+    const playerWrapper = document.getElementById('playerWrapper');
+
+    let hls;
+
+    // Fetch Stream API from Node Backend
+    fetch('http://localhost:5000/api/get-stream?id=101')
+      .then(res => res.json())
+      .then(data => {
+        if (data.status === 'success') {
+          initHLS(data.stream_url);
+        } else {
+          alert('Stream URL Fetch Error: ' + data.message);
+        }
+      })
+      .catch(err => {
+        console.error(err);
+        loader.style.display = 'none';
+      });
+
+    function initHLS(url) {
+      if (Hls.isSupported()) {
+        hls = new Hls();
+        hls.loadSource(url);
+        hls.attachMedia(video);
+
+        hls.on(Hls.Events.MANIFEST_PARSED, function () {
+          loader.style.display = 'none';
+          setupQualityLevels();
+        });
+
+        hls.on(Hls.Events.LEVEL_SWITCHED, function (event, data) {
+          console.log('Switched to quality level:', data.level);
+        });
+      } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+        video.src = url;
+        loader.style.display = 'none';
+      }
+    }
+
+    // Dynamic Quality Menu Setup
+    function setupQualityLevels() {
+      const levels = hls.levels;
+      qualitySelect.innerHTML = '<option value="-1">Auto Quality</option>';
+      levels.forEach((level, index) => {
+        const option = document.createElement('option');
+        option.value = index;
+        option.text = level.height ? `${level.height}p` : `Level ${index + 1}`;
+        qualitySelect.appendChild(option);
+      });
+    }
+
+    qualitySelect.addEventListener('change', (e) => {
+      hls.currentLevel = parseInt(e.target.value);
+    });
+
+    // Play / Pause Toggle
+    playBtn.addEventListener('click', togglePlay);
+    video.addEventListener('click', togglePlay);
+
+    function togglePlay() {
+      if (video.paused) {
+        video.play();
+        playBtn.innerHTML = '<i class="fa-solid fa-pause"></i>';
+      } else {
+        video.pause();
+        playBtn.innerHTML = '<i class="fa-solid fa-play"></i>';
+      }
+    }
+
+    // Fast Rewind & Forward 10s
+    rewindBtn.addEventListener('click', () => video.currentTime -= 10);
+    forwardBtn.addEventListener('click', () => video.currentTime += 10);
+
+    // Mute / Unmute
+    muteBtn.addEventListener('click', () => {
+      video.muted = !video.muted;
+      muteBtn.innerHTML = video.muted 
+        ? '<i class="fa-solid fa-volume-xmark"></i>' 
+        : '<i class="fa-solid fa-volume-high"></i>';
+    });
+
+    // Progress Bar & Time Formatting
+    video.addEventListener('timeupdate', () => {
+      const current = video.currentTime;
+      const duration = video.duration || 0;
+      const percent = (current / duration) * 100;
+      progressBar.style.width = `${percent}%`;
+
+      timeDisplay.innerText = `${formatTime(current)} / ${formatTime(duration)}`;
+    });
+
+    progressArea.addEventListener('click', (e) => {
+      const width = progressArea.clientWidth;
+      const clickX = e.offsetX;
+      const duration = video.duration;
+      video.currentTime = (clickX / width) * duration;
+    });
+
+    function formatTime(seconds) {
+      const min = Math.floor(seconds / 60);
+      const sec = Math.floor(seconds % 60);
+      return `${min}:${sec < 10 ? '0' : ''}${sec}`;
+    }
+
+    // Fullscreen Toggle
+    fullscreenBtn.addEventListener('click', () => {
+      if (!document.fullscreenElement) {
+        playerWrapper.requestFullscreen();
+        fullscreenBtn.innerHTML = '<i class="fa-solid fa-compress"></i>';
+      } else {
+        document.exitFullscreen();
+        fullscreenBtn.innerHTML = '<i class="fa-solid fa-expand"></i>';
+      }
+    });
+  </script>
+</body>
+</html>
