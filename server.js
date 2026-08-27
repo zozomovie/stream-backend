@@ -1,6 +1,6 @@
 const express = require('express');
 const puppeteer = require('puppeteer-core');
-const chromium = require('@sparticuz/chromium');
+chromium = require('@sparticuz/chromium');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -16,13 +16,10 @@ app.get('/get-stream', async (req, res) => {
     try {
         console.log("Launching cloud chromium...");
         
-        // Yahan 'await' lagana zaroori hai kyunki yeh async function hai
-        const executablePath = await chromium.executablePath();
-        
         browser = await puppeteer.launch({
             args: chromium.args,
             defaultViewport: chromium.defaultViewport,
-            executablePath: executablePath,
+            executablePath: await chromium.executablePath(), // Yahan brackets aur await dono sahi format mein hain
             headless: chromium.headless,
             ignoreHTTPSErrors: true,
         });
