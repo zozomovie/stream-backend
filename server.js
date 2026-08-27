@@ -1,5 +1,6 @@
 const express = require('express');
-const puppeteer = require('puppeteer');
+const puppeteer = require('puppeteer-core');
+const chromium = require('chrome-aws-lambda');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -13,25 +14,22 @@ app.get('/get-stream', async (req, res) => {
 
     let browser;
     try {
-        console.log("Launching browser for dynamic page...");
+        console.log("Launching cloud chromium...");
         
-        // Render ke liye safe browser launch config
+        // Render ke liye aws-lambda chromium setup
+        const executablePath = await chromium.executablePath || process.env.PUPPETEER_EXECUTABLE_PATH;
+        
         browser = await puppeteer.launch({
-            headless: true,
-            args: [
-                "--no-sandbox",
-                "--disable-setuid-sandbox",
-                "--disable-dev-shm-usage",
-                "--disable-gpu"
-            ],
-            executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || puppeteer.executablePath()
+            args: chromium.args,
+            defaultViewport: chromium.defaultViewport,
+            executablePath: await chromium.executablePath,
+            headless: chromium.headless,
+            ignoreHTTPSErrors: true,
         });
 
         const page = await browser.newPage();
-        
         let streamUrl = null;
 
-        // Jaise hi page network request karega, hum m3u8 link pakad lenge
         page.on('request', (request) => {
             const reqUrl = request.url();
             if (reqUrl.includes('.m3u8') || reqUrl.includes('playlist')) {
@@ -40,8 +38,6 @@ app.get('/get-stream', async (req, res) => {
         });
 
         await page.goto(targetUrl, { waitUntil: 'networkidle2', timeout: 30000 });
-
-        // Thoda wait karenge taaki player load ho aur request trigger ho
         await new Promise(resolve => setTimeout(resolve, 4000));
 
         await browser.close();
