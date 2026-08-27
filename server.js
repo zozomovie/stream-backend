@@ -1,5 +1,6 @@
 const express = require('express');
-const puppeteer = require('puppeteer');
+const puppeteer = require('puppeteer-core');
+const chromium = require('@sparticuz/chromium');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -13,16 +14,16 @@ app.get('/get-stream', async (req, res) => {
 
     let browser;
     try {
-        console.log("Launching browser...");
+        console.log("Launching cloud chromium...");
+        
+        const executablePath = await chromium.executablePath();
         
         browser = await puppeteer.launch({
-            headless: true,
-            args: [
-                "--no-sandbox",
-                "--disable-setuid-sandbox",
-                "--disable-dev-shm-usage",
-                "--disable-gpu"
-            ]
+            args: chromium.args,
+            defaultViewport: chromium.defaultViewport,
+            executablePath: executablePath,
+            headless: chromium.headless,
+            ignoreHTTPSErrors: true,
         });
 
         const page = await browser.newPage();
@@ -50,8 +51,8 @@ app.get('/get-stream', async (req, res) => {
         if (browser) {
             await browser.close();
         }
-        console.error("Error:", error.message);
-        return res.status(500).json({ error: error.message });
+        console.error("Detailed Error:", error.message);
+        return res.status(500).json({ error: error.message, stack: error.stack });
     }
 });
 
